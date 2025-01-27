@@ -28,7 +28,7 @@ where
                 drop(curr_guard);
 
                 self.cache.remove(&key);
-                self.unlink_node(current.clone());
+                self.unlink_node(current.clone())?;
                 self.hand = prev;
                 self.size -= 1;
                 return Ok(());
