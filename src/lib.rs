@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 
 // Node represents a cache entry in the doubly-linked list
 #[derive(Clone)]  // Added Clone derive
@@ -9,8 +10,8 @@ struct Node<K, V> {
     value: V,
     visited: bool,
     // Using raw pointers instead of Box for the linked list
-    next: *mut Node<K, V>,
-    prev: *mut Node<K, V>,
+    next: Option<Arc<Mutex<Node<K, V>>>>,
+    prev: Option<Arc<Mutex<Node<K, V>>>>,
 }
 
 impl<K, V> Node<K, V> {
@@ -19,18 +20,18 @@ impl<K, V> Node<K, V> {
             key,
             value,
             visited: false,
-            next: std::ptr::null_mut(),
-            prev: std::ptr::null_mut(),
+            next: None,
+            prev: None,
         }
     }
 }
 
 // SieveCache is the main cache structure
 pub struct SieveCache<K, V> {
-    cache: HashMap<K, Box<Node<K, V>>>,
-    head: *mut Node<K, V>,
-    tail: *mut Node<K, V>,
-    hand: *mut Node<K, V>,
+    cache: HashMap<K, Arc<Mutex<Node<K, V>>>>,
+    head: Option<Arc<Mutex<Node<K, V>>>>,
+    tail: Option<Arc<Mutex<Node<K, V>>>>,
+    hand: Option<Arc<Mutex<Node<K, V>>>>,
     size: usize,
     capacity: usize,
 }
@@ -43,27 +44,28 @@ where
     pub fn new(capacity: usize) -> Self {
         SieveCache {
             cache: HashMap::with_capacity(capacity),
-            head: std::ptr::null_mut(),
-            tail: std::ptr::null_mut(),
-            hand: std::ptr::null_mut(),
+            head: None,
+            tail: None,
+            hand: None,
             size: 0,
             capacity,
         }
     }
 
-    pub fn get(&mut self, key: &K) -> Option<&V> {
-        if let Some(node) = self.cache.get_mut(key) {
-            node.visited = true;
-            Some(&node.value)
-        } else {
-            None
-        }
+    pub fn get(&mut self, key: &K) -> Option<V> {  // Note: returning V instead of &V
+    if let Some(node) = self.cache.get_mut(key) {
+        let mut guard = node.lock().unwrap();
+        guard.visited = true;
+        Some(guard.value.clone())
+    } else {
+        None
     }
+}
 
     pub fn add(&mut self, key: K, value: V) -> bool {
         if let Some(node) = self.cache.get_mut(&key) {
-            node.visited = true;
-            node.value = value;
+            node.lock().unwrap().visited = true;
+            node.lock().unwrap().value = value;
             true
         } else {
             self.insert(key, value);
@@ -73,7 +75,7 @@ where
 
     pub fn probe(&mut self, key: K, value: V) -> (V, bool) {
         if let Some(node) = self.cache.get(&key) {
-            (node.value.clone(), true)
+            (node.lock().unwrap().value.clone(), true)
         } else {
             self.insert(key, value.clone());
             (value, false)
@@ -82,9 +84,7 @@ where
 
     pub fn delete(&mut self, key: &K) -> bool {
         if let Some(node) = self.cache.remove(key) {
-            unsafe {
-                self.unlink_node(Box::into_raw(node));
-            }
+            self.unlink_node(node);
             self.size -= 1;
             true
         } else {
@@ -94,9 +94,9 @@ where
 
     pub fn purge(&mut self) {
         self.cache.clear();
-        self.head = std::ptr::null_mut();
-        self.tail = std::ptr::null_mut();
-        self.hand = std::ptr::null_mut();
+        self.head = None;
+        self.tail = None;
+        self.hand = None;
         self.size = 0;
     }
 
@@ -114,65 +114,89 @@ where
             self.evict();
         }
 
-        let new_node = Box::new(Node::new(key.clone(), value));
-        let node_ptr = Box::into_raw(new_node);
+        let new_node = Node::new(key.clone(), value);
+        // Create an Arc<Mutex<Node>> instead of a raw pointer
+        let new_node = Arc::new(Mutex::new(new_node));
 
-        unsafe {
-            // Link at the head
-            (*node_ptr).next = self.head;
-            if !self.head.is_null() {
-                (*self.head).prev = node_ptr;
-            }
-            
-            self.head = node_ptr;
-            
-            if self.tail.is_null() {
-                self.tail = node_ptr;
-            }
+        // set the next pointer
+        {
+            let mut node = new_node.lock().unwrap();
+            node.next = self.head.clone();
         }
 
-        self.cache.insert(key, unsafe { Box::from_raw(node_ptr) });
+        // update the prev pointer of the old head
+        if let Some(head) = &self.head {
+            head.lock().unwrap().prev = Some(new_node.clone());
+        }
+
+        // set the new head
+        self.head = Some(new_node.clone());
+
+        // if theres no tail, this is the first node
+        if self.tail.is_none() {
+            self.tail = Some(new_node.clone());
+        }
+
+        self.cache.insert(key, new_node);
         self.size += 1;
     }
 
     fn evict(&mut self) {
-        if self.hand.is_null() {
-            self.hand = self.tail;
+        if self.hand.is_none() {
+            self.hand = self.tail.clone();
         }
 
-        unsafe {
-            while !self.hand.is_null() {
-                let current = self.hand;
-                if !(*current).visited {
-                    self.cache.remove(&(*current).key);
-                    let prev = (*current).prev;
-                    self.unlink_node(current);
-                    self.hand = prev;
-                    self.size -= 1;
-                    return;
-                }
+        while let Some(current) = &self.hand {
+            let mut curr_guard = current.lock().unwrap();
 
-                (*current).visited = false;
-                self.hand = (*current).prev;
+            if !curr_guard.visited {
+                let key = curr_guard.key.clone();
+                let prev = curr_guard.prev.clone();
 
-                if self.hand.is_null() {
-                    self.hand = self.tail;
-                }
+                drop(curr_guard);
+
+                self.cache.remove(&key);
+                self.unlink_node(current.clone());
+                self.hand = prev;
+                self.size -= 1;
+                return;
+            }
+
+            curr_guard.visited = false;
+            let prev = curr_guard.prev.clone();
+            drop(curr_guard);
+
+            self.hand = prev;
+
+            if self.hand.is_none() {
+                self.hand = self.tail.clone();
             }
         }
     }
 
-    unsafe fn unlink_node(&mut self, node: *mut Node<K, V>) {
-        if !(*node).prev.is_null() {
-            (*(*node).prev).next = (*node).next;
+    fn unlink_node(&mut self, node: Arc<Mutex<Node<K, V>>>) {
+        // Get the next and prev pointers before we start modifying
+        let (next, prev) = {
+            let node_guard = node.lock().unwrap();
+            (node_guard.next.clone(), node_guard.prev.clone())
+        };
+
+        // Update the previous node's next pointer
+        if let Some(prev_node) = &prev {
+            let mut prev_guard = prev_node.lock().unwrap();
+            prev_guard.next = next.clone();
         } else {
-            self.head = (*node).next;
+            // This was the head
+            self.head = next.clone();
         }
 
-        if !(*node).next.is_null() {
-            (*(*node).next).prev = (*node).prev;
+        // Update the next node's prev pointer
+        if let Some(next_node) = next {
+            let mut next_guard = next_node.lock().unwrap();
+            next_guard.prev = prev.clone();
         } else {
-            self.tail = (*node).prev;
+            // This was the tail
+            self.tail = prev;
         }
     }
 }
@@ -206,11 +230,11 @@ mod tests {
         
         // Add a new item
         assert_eq!(cache.add(String::from("key1"), 1), false); // Returns false for new addition
-        assert_eq!(cache.get(&String::from("key1")), Some(&1));
+        assert_eq!(cache.get(&String::from("key1")), Some(1));
         
         // Update existing item
         assert_eq!(cache.add(String::from("key1"), 2), true); // Returns true for update
-        assert_eq!(cache.get(&String::from("key1")), Some(&2));
+        assert_eq!(cache.get(&String::from("key1")), Some(2));
     }
 
     #[test]
@@ -223,14 +247,14 @@ mod tests {
         assert_eq!(cache.len(), 2);
         
         // Access key1 to mark it as visited
-        assert_eq!(cache.get(&String::from("key1")), Some(&1));
+        assert_eq!(cache.get(&String::from("key1")), Some(1));
         
         // Add another item, should evict key2 (not visited)
         cache.add(String::from("key3"), 3);
         
-        assert_eq!(cache.get(&String::from("key1")), Some(&1)); // Should still exist
+        assert_eq!(cache.get(&String::from("key1")), Some(1)); // Should still exist
         assert_eq!(cache.get(&String::from("key2")), None);     // Should be evicted
-        assert_eq!(cache.get(&String::from("key3")), Some(&3)); // Should exist
+        assert_eq!(cache.get(&String::from("key3")), Some(3)); // Should exist
     }
 
     #[test]
@@ -300,7 +324,7 @@ mod tests {
         cache.add(1, String::from("one"));
         cache.add(2, String::from("two"));
         
-        assert_eq!(cache.get(&1), Some(&String::from("one")));
-        assert_eq!(cache.get(&2), Some(&String::from("two")));
+        assert_eq!(cache.get(&1), Some(String::from("one")));
+        assert_eq!(cache.get(&2), Some(String::from("two")));
     }
 }
