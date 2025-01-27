@@ -35,6 +35,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             None => println!("{}: was evicted", key),
         }
     }
-
-    return Ok(());
+    Ok(())
 }
