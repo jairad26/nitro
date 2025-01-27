@@ -26,8 +26,16 @@ where
     K: Eq + Hash + Clone,
     V: Clone,
 {
-    pub fn new(capacity: usize) -> Self {
-        SieveCache {
+
+    // The SieveCache struct is a HashMap that stores the keys and values of the cache.
+    // It also has a head, tail, and hand field that are used to implement the Sieve algorithm.
+    // The size field keeps track of the number of elements in the cache, and the capacity field
+    // specifies the maximum number of elements that the cache can hold.
+    pub fn new(capacity: usize) -> Result<Self, CacheError> {
+        if capacity < 1 {
+            return Err(CacheError::CapacityError("Cache capacity cannot be zero".to_string()));
+        }
+        Ok(SieveCache {
             cache: HashMap::with_capacity(capacity),
             head: None,
             tail: None,
@@ -35,9 +43,15 @@ where
             size: 0,
             capacity,
             stats: CacheStats { hits: 0, misses: 0 },
-        }
+        })
     }
 
+    /// Retrieves a value from the cache if it exists.
+    ///
+    /// # Returns
+    /// - `Ok(Some(V))` if the key exists
+    /// - `Ok(None)` if the key doesn't exist
+    /// - `Err(CacheError)` if there was a lock poisoning
     pub fn get(&mut self, key: &K) -> Result<Option<V>, CacheError> {
         if let Some(node) = self.cache.get_mut(key) {
             let guard = node.lock()
@@ -51,6 +65,13 @@ where
         }
     }
 
+    /// Adds a value to the cache.
+    ///
+    /// # Returns
+    /// - `Ok(true)` if the key already existed and the value was updated
+    /// - `Ok(false)` if the key was newly inserted
+    /// - `Err(CacheError)` if there was a lock poisoning
+    #[must_use = "The returned value indicates whether the key already existed"]
     pub fn add(&mut self, key: K, value: V) -> Result<bool, CacheError> {
         if let Some(node) = self.cache.get_mut(&key) {
             let mut node_guard = node.lock()
@@ -60,33 +81,40 @@ where
             drop(node_guard);
             Ok(true)
         } else {
-            self.insert(key, value);
+            self.insert(key, value)?;
             Ok(false)
         }
     }
 
-    pub fn probe(&mut self, key: K, value: V) -> (V, bool) {
+    /// Probes the cache for a value, inserting it if not present.
+    ///
+    /// # Returns
+    /// - The value associated with the key (either existing or newly inserted)
+    /// - A boolean indicating whether the key already existed
+    #[must_use = "This returns the probed value and whether it existed"]
+    pub fn probe(&mut self, key: K, value: V) -> Result<(V, bool), CacheError> {
         match self.cache.get(&key) {
             Some(node) => {
-                let guard = node.lock().unwrap();
+                let guard = node.lock()
+                    .map_err(|e| CacheError::LockError(e.to_string()))?;
                 let result = guard.value.clone();
                 drop(guard);
-                (result, true)
+                Ok((result, true))
             }
             None => {
-                self.insert(key, value.clone());
-                (value, false)
+                self.insert(key, value.clone())?;
+                Ok((value, false))
             }
         }
     }
 
-    pub fn delete(&mut self, key: &K) -> bool {
+    pub fn delete(&mut self, key: &K) -> Result<bool, CacheError> {
         if let Some(node) = self.cache.remove(key) {
-            self.unlink_node(node);
+            self.unlink_node(node)?;
             self.size -= 1;
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -98,6 +126,11 @@ where
         self.size = 0;
     }
 
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
+
     pub fn len(&self) -> usize {
         self.size
     }
@@ -106,11 +139,12 @@ where
         self.capacity
     }
 
-    fn insert(&mut self, key: K, value: V) {
+    fn insert(&mut self, key: K, value: V) -> Result<(), CacheError> {
         if self.size == self.capacity {
-            self.evict();
+            self.evict()?;
         }
-        self.insert_node(key, value);
+        self.insert_node(key, value)?;
+        Ok(())
     }
 
     pub fn get_stats(&self) -> &CacheStats {

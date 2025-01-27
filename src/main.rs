@@ -1,7 +1,7 @@
 use nitro::SieveCache;
 
-fn main() {
-    let mut cache: SieveCache<String, String> = SieveCache::new(3);
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cache: SieveCache<String, String> = SieveCache::new(3)?;
 
     // Add some items
     println!("Adding initial items...");
@@ -27,4 +27,6 @@ fn main() {
             None => println!("{}: was evicted", key),
         }
     }
+
+    return Ok(());
 }

@@ -2,7 +2,7 @@ use nitro::SieveCache;
 
 #[test]
 fn test_basic_integration() {
-    let mut cache: SieveCache<String, i32> = SieveCache::new(2);
+    let mut cache: SieveCache<String, i32> = SieveCache::new(2).unwrap();
     
     // Test basic operations in sequence
     assert_eq!(cache.add(String::from("key1"), 1).unwrap(), false);
@@ -20,7 +20,7 @@ fn test_basic_integration() {
 
 #[test]
 fn test_complex_operations() {
-    let mut cache: SieveCache<String, String> = SieveCache::new(3);
+    let mut cache: SieveCache<String, String> = SieveCache::new(3).unwrap();
     
     // Add items
     cache.add(String::from("a"), String::from("alpha")).unwrap();
@@ -30,12 +30,12 @@ fn test_complex_operations() {
     assert_eq!(cache.get(&String::from("a")).unwrap(), Some(String::from("alpha")));
     
     // Probe
-    let (val, exists) = cache.probe(String::from("c"), String::from("gamma"));
+    let (val, exists) = cache.probe(String::from("c"), String::from("gamma")).unwrap();
     assert_eq!(val, String::from("gamma"));
     assert_eq!(exists, false);
     
     // Delete
-    assert!(cache.delete(&String::from("b")));
+    assert!(cache.delete(&String::from("b")).unwrap());
     assert_eq!(cache.get(&String::from("b")).unwrap(), None);
     
     // Check stats

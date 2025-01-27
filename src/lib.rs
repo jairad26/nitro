@@ -15,14 +15,14 @@ mod tests {
 
     #[test]
     fn test_new_cache() {
-        let cache: SieveCache<String, i32> = SieveCache::new(5);
+        let cache: SieveCache<String, i32> = SieveCache::new(5).unwrap();
         assert_eq!(cache.len(), 0);
         assert_eq!(cache.capacity(), 5);
     }
 
     #[test]
     fn test_add_and_get() {
-        let mut cache: SieveCache<String, i32> = SieveCache::new(3);
+        let mut cache: SieveCache<String, i32> = SieveCache::new(3).unwrap();
         
         // Add a new item
         assert_eq!(cache.add(String::from("key1"), 1).unwrap(), false);
@@ -35,7 +35,7 @@ mod tests {
 
     #[test]
     fn test_capacity_and_eviction() {
-        let mut cache: SieveCache<String, i32> = SieveCache::new(2);
+        let mut cache: SieveCache<String, i32> = SieveCache::new(2).unwrap();
         
         cache.add(String::from("key1"), 1).unwrap();
         cache.add(String::from("key2"), 2).unwrap();
@@ -52,30 +52,30 @@ mod tests {
 
     #[test]
     fn test_probe() {
-        let mut cache: SieveCache<String, i32> = SieveCache::new(2);
+        let mut cache: SieveCache<String, i32> = SieveCache::new(2).unwrap();
         
-        let (val, exists) = cache.probe(String::from("key1"), 1);
+        let (val, exists) = cache.probe(String::from("key1"), 1).unwrap();
         assert_eq!(val, 1);
         assert_eq!(exists, false);
         
-        let (val, exists) = cache.probe(String::from("key1"), 2);
+        let (val, exists) = cache.probe(String::from("key1"), 2).unwrap();
         assert_eq!(val, 1);
         assert_eq!(exists, true);
     }
 
     #[test]
     fn test_delete() {
-        let mut cache: SieveCache<String, i32> = SieveCache::new(2);
+        let mut cache: SieveCache<String, i32> = SieveCache::new(2).unwrap();
         
         cache.add(String::from("key1"), 1).unwrap();
-        assert_eq!(cache.delete(&String::from("key1")), true);
+        assert_eq!(cache.delete(&String::from("key1")).unwrap(), true);
         assert_eq!(cache.get(&String::from("key1")).unwrap(), None);
-        assert_eq!(cache.delete(&String::from("key1")), false);
+        assert_eq!(cache.delete(&String::from("key1")).unwrap(), false);
     }
 
     #[test]
     fn test_purge() {
-        let mut cache: SieveCache<String, i32> = SieveCache::new(2);
+        let mut cache: SieveCache<String, i32> = SieveCache::new(2).unwrap();
         
         cache.add(String::from("key1"), 1).unwrap();
         cache.add(String::from("key2"), 2).unwrap();
@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn test_eviction_policy() {
-        let mut cache: SieveCache<String, i32> = SieveCache::new(3);
+        let mut cache: SieveCache<String, i32> = SieveCache::new(3).unwrap();
         
         cache.add(String::from("key1"), 1).unwrap();
         cache.add(String::from("key2"), 2).unwrap();
@@ -107,7 +107,7 @@ mod tests {
 
     #[test]
     fn test_with_different_types() {
-        let mut cache: SieveCache<i32, String> = SieveCache::new(2);
+        let mut cache: SieveCache<i32, String> = SieveCache::new(2).unwrap();
         
         cache.add(1, String::from("one")).unwrap();
         cache.add(2, String::from("two")).unwrap();
