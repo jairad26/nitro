@@ -1,6 +1,6 @@
-use std::sync::atomic::Ordering;
 use crate::{linked_list::LinkedListOps, CacheError};
 use std::hash::Hash;
+use std::sync::atomic::Ordering;
 
 pub(crate) trait EvictionPolicy<K, V> {
     fn evict(&mut self) -> Result<(), CacheError>;
@@ -17,7 +17,8 @@ where
         }
 
         while let Some(current) = &self.hand {
-            let curr_guard = current.lock()
+            let curr_guard = current
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
 
             if !curr_guard.visited.load(Ordering::SeqCst) {

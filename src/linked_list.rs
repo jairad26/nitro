@@ -1,6 +1,6 @@
-use std::sync::{Arc, Mutex};
 use crate::{node::Node, CacheError};
 use std::hash::Hash;
+use std::sync::{Arc, Mutex};
 
 pub(crate) trait LinkedListOps<K, V> {
     fn insert_node(&mut self, key: K, value: V) -> Result<(), CacheError>;
@@ -18,14 +18,16 @@ where
 
         // set the next pointer
         {
-            let mut node = new_node.lock()
+            let mut node = new_node
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
             node.next = self.head.clone();
         }
 
         // update the prev pointer of the old head
         if let Some(head) = &self.head {
-            let mut head_guard = head.lock()
+            let mut head_guard = head
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
 
             head_guard.prev = Some(new_node.clone());
@@ -46,13 +48,15 @@ where
 
     fn unlink_node(&mut self, node: Arc<Mutex<Node<K, V>>>) -> Result<(), CacheError> {
         let (next, prev) = {
-            let node_guard = node.lock()
+            let node_guard = node
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
             (node_guard.next.clone(), node_guard.prev.clone())
         };
 
         if let Some(prev_node) = &prev {
-            let mut prev_guard = prev_node.lock()
+            let mut prev_guard = prev_node
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
             prev_guard.next = next.clone();
         } else {
@@ -60,7 +64,8 @@ where
         }
 
         if let Some(next_node) = next {
-            let mut next_guard = next_node.lock()
+            let mut next_guard = next_node
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
             next_guard.prev = prev.clone();
         } else {

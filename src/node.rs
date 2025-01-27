@@ -1,8 +1,8 @@
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 // Node represents a cache entry in the doubly-linked list
-#[derive(Debug)]  // Added Debug derive
+#[derive(Debug)] // Added Debug derive
 pub(crate) struct Node<K, V> {
     pub(crate) key: K,
     pub(crate) value: V,

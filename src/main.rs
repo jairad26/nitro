@@ -5,9 +5,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add some items
     println!("Adding initial items...");
-    cache.add(String::from("key1"), String::from("value1")).unwrap();
-    cache.add(String::from("key2"), String::from("value2")).unwrap();
-    cache.add(String::from("key3"), String::from("value3")).unwrap();
+    cache
+        .add(String::from("key1"), String::from("value1"))
+        .unwrap();
+    cache
+        .add(String::from("key2"), String::from("value2"))
+        .unwrap();
+    cache
+        .add(String::from("key3"), String::from("value3"))
+        .unwrap();
 
     // Get an item (marks it as visited)
     println!("\nTrying to get key1...");
@@ -17,7 +23,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Add another item, which should trigger eviction
     println!("\nAdding key4 (should trigger eviction)...");
-    cache.add(String::from("key4"), String::from("value4")).unwrap();
+    cache
+        .add(String::from("key4"), String::from("value4"))
+        .unwrap();
 
     // Try to get potentially evicted items
     println!("\nChecking which keys are still in cache:");

@@ -1,15 +1,15 @@
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::fmt::Debug;
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::Ordering;
+use std::hash::Hash;
 use std::marker::PhantomData;
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 
-use crate::node::Node;
-use crate::types::{CacheError, CacheStats};
+use crate::eviction::EvictionPolicy;
 use crate::iter::CacheIterator;
 use crate::linked_list::LinkedListOps;
-use crate::eviction::EvictionPolicy;
+use crate::node::Node;
+use crate::types::{CacheError, CacheStats};
 
 pub struct SieveCache<K, V> {
     pub(crate) cache: HashMap<K, Arc<Mutex<Node<K, V>>>>,
@@ -21,19 +21,20 @@ pub struct SieveCache<K, V> {
     pub(crate) stats: CacheStats,
 }
 
-impl<K, V> SieveCache<K, V> 
+impl<K, V> SieveCache<K, V>
 where
     K: Eq + Hash + Clone,
     V: Clone,
 {
-
     // The SieveCache struct is a HashMap that stores the keys and values of the cache.
     // It also has a head, tail, and hand field that are used to implement the Sieve algorithm.
     // The size field keeps track of the number of elements in the cache, and the capacity field
     // specifies the maximum number of elements that the cache can hold.
     pub fn new(capacity: usize) -> Result<Self, CacheError> {
         if capacity < 1 {
-            return Err(CacheError::CapacityError("Cache capacity cannot be zero".to_string()));
+            return Err(CacheError::CapacityError(
+                "Cache capacity cannot be zero".to_string(),
+            ));
         }
         Ok(SieveCache {
             cache: HashMap::with_capacity(capacity),
@@ -54,7 +55,8 @@ where
     /// - `Err(CacheError)` if there was a lock poisoning
     pub fn get(&mut self, key: &K) -> Result<Option<V>, CacheError> {
         if let Some(node) = self.cache.get_mut(key) {
-            let guard = node.lock()
+            let guard = node
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
             guard.visited.store(true, Ordering::SeqCst);
             self.stats.hits += 1;
@@ -74,7 +76,8 @@ where
     #[must_use = "The returned value indicates whether the key already existed"]
     pub fn add(&mut self, key: K, value: V) -> Result<bool, CacheError> {
         if let Some(node) = self.cache.get_mut(&key) {
-            let mut node_guard = node.lock()
+            let mut node_guard = node
+                .lock()
                 .map_err(|e| CacheError::LockError(e.to_string()))?;
             node_guard.visited.store(true, Ordering::SeqCst);
             node_guard.value = value;
@@ -95,7 +98,8 @@ where
     pub fn probe(&mut self, key: K, value: V) -> Result<(V, bool), CacheError> {
         match self.cache.get(&key) {
             Some(node) => {
-                let guard = node.lock()
+                let guard = node
+                    .lock()
                     .map_err(|e| CacheError::LockError(e.to_string()))?;
                 let result = guard.value.clone();
                 drop(guard);
@@ -168,16 +172,23 @@ where
         f.debug_struct("SieveCache")
             .field("size", &self.size)
             .field("capacity", &self.capacity)
-            .field("cache_usage", &format!("{}%", (self.size * 100) / self.capacity))
+            .field(
+                "cache_usage",
+                &format!("{}%", (self.size * 100) / self.capacity),
+            )
             .field("hits", &self.stats.hits)
             .field("misses", &self.stats.misses)
-            .field("hit_rate", &format!("{}%",
-                if self.stats.hits + self.stats.misses > 0 {
-                    (self.stats.hits * 100) / (self.stats.hits + self.stats.misses)
-                } else {
-                    0
-                }
-            ))
+            .field(
+                "hit_rate",
+                &format!(
+                    "{}%",
+                    if self.stats.hits + self.stats.misses > 0 {
+                        (self.stats.hits * 100) / (self.stats.hits + self.stats.misses)
+                    } else {
+                        0
+                    }
+                ),
+            )
             .finish()
     }
 }
