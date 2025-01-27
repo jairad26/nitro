@@ -6,7 +6,7 @@ pub struct CacheIterator<'a, K, V> {
     pub(crate) _phantom: std::marker::PhantomData<&'a (K, V)>,
 }
 
-impl<'a, K: Clone, V: Clone> Iterator for CacheIterator<'a, K, V> {
+impl<K: Clone, V: Clone> Iterator for CacheIterator<'_, K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
